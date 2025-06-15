@@ -243,6 +243,8 @@ def get_all_candidates_by_job_id(job_id):
     3. cultural_fit_score (descending)
     4. uniqueness_score (descending)
     
+    Only returns candidates with status 'accepted' or 'inconsideration'
+    
     Args:
         job_id (str): The job ID to filter candidates by
         
@@ -262,12 +264,18 @@ def get_all_candidates_by_job_id(job_id):
         dynamodb = session.resource('dynamodb')
         table = dynamodb.Table(DYNAMODB_TABLE_NAME)
         
-        # Query the table using job_id as the partition key
+        # Query the table using job_id as the partition key and filter by status
         print("Executing DynamoDB query...")
         response = table.query(
             KeyConditionExpression='job_id = :job_id',
+            FilterExpression='#status IN (:status1, :status2)',
+            ExpressionAttributeNames={
+                '#status': 'status'  # status is a reserved word in DynamoDB
+            },
             ExpressionAttributeValues={
-                ':job_id': job_id
+                ':job_id': job_id,
+                ':status1': 'accepted',
+                ':status2': 'inconsideration'
             }
         )
         
@@ -280,8 +288,14 @@ def get_all_candidates_by_job_id(job_id):
             print("Fetching more results...")
             response = table.query(
                 KeyConditionExpression='job_id = :job_id',
+                FilterExpression='#status IN (:status1, :status2)',
+                ExpressionAttributeNames={
+                    '#status': 'status'
+                },
                 ExpressionAttributeValues={
-                    ':job_id': job_id
+                    ':job_id': job_id,
+                    ':status1': 'accepted',
+                    ':status2': 'inconsideration'
                 },
                 ExclusiveStartKey=response['LastEvaluatedKey']
             )
