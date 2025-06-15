@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.controllers import candidate_controller, sample_controller
+from app.routes import questions
 
 app = FastAPI(title="Candidate Management API")
 
@@ -28,6 +29,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(candidate_controller.router, prefix="/api/v1")
 app.include_router(sample_controller.router, prefix="/api/v1", tags=["sample"])
+app.include_router(questions.router, prefix="/api/v1", tags=["questions"])
 
 if __name__ == "__main__":
     import uvicorn

@@ -162,6 +162,7 @@ def get_candidate(job_id, candidate_id):
                 'candidate_id': candidate_id
             }
         )
+        print(response.get('Item'))
         
         return response.get('Item')
     except Exception as e:

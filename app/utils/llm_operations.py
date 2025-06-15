@@ -1,109 +1,83 @@
-import os
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage
 import json
-from typing import List, Dict, Any
-from datetime import datetime
-import openai
-from fastapi import HTTPException
-from botocore.exceptions import ClientError
-from .aws_operations import session, S3_BUCKET_NAME, DYNAMODB_TABLE_NAME
+import os
+from dotenv import load_dotenv
 
-# Check required environment variables
-required_env_vars = ['OPENAI_API_KEY', 'S3_BUCKET_NAME']
-missing_vars = [var for var in required_env_vars if not os.getenv(var)]
-if missing_vars:
-    raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_vars)}")
+# Load environment variables
+load_dotenv()
 
-# Initialize AWS clients using the session from aws_operations
-dynamodb = session.resource('dynamodb')
-s3_client = session.client('s3')
+# Check for OpenAI API key
+if not os.getenv('OPENAI_API_KEY'):
+    raise EnvironmentError("OPENAI_API_KEY environment variable is not set")
 
-async def generate_interview_questions(job_id: str, candidate_id: str, s3_parsed_key: str) -> Dict[str, Any]:
+# Initialize LLM
+llm = ChatOpenAI(
+    model="gpt-4",
+    temperature=0.5,
+    api_key=os.getenv('OPENAI_API_KEY')
+)
+
+def generate_interview_questions(job_description, candidate_analysis):
     """
-    Generate interview questions using ChatGPT API based on parsed resume.
-    The questions will be stored in S3 and the key will be returned.
+    Generate interview questions using GPT-4 based on job description and candidate analysis
     
     Args:
-        job_id (str): The ID of the job posting
-        candidate_id (str): The ID of the candidate
-        s3_parsed_key (str): The S3 key of the parsed resume
+        job_description (dict/str): The job description content
+        candidate_analysis (dict/str): The candidate's analysis/resume content
         
     Returns:
-        Dict[str, Any]: Dictionary containing the questions
+        list: List of question objects with question, category, and context
     """
-    try:
-        if not S3_BUCKET_NAME:
-            raise HTTPException(
-                status_code=500,
-                detail="S3_BUCKET_NAME environment variable is not configured"
-            )
-
-        # Get parsed resume from S3
-        s3 = session.client('s3')
-        try:
-            response = s3.get_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=s3_parsed_key
-            )
-            parsed_resume = json.loads(response['Body'].read().decode('utf-8'))
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to fetch parsed resume from S3: {str(e)}"
-            )
-
-        # Prepare the prompt for ChatGPT
-        prompt = f"""Based on the following parsed resume, generate interview questions.
-        The questions should be specific to the candidate's experience and skills.
+    # Convert inputs to strings if they are dictionaries
+    if isinstance(job_description, dict):
+        job_description = json.dumps(job_description, indent=2)
+    if isinstance(candidate_analysis, dict):
+        candidate_analysis = json.dumps(candidate_analysis, indent=2)
+    
+    prompt = f"""
+        Generate 3-5 interview questions for a candidate based on the following information:
         
-        Parsed Resume:
-        {json.dumps(parsed_resume, indent=2)}
+        Job Description:
+        {job_description}
         
-        Generate 3-5 questions in each of these categories:
-        1. Technical Leadership & Architecture
-        2. Job description skills
-        3. resume experience skills
-        4. Team Management & Communication
-        5. Problem Solving & System Design
+        Candidate Experience:
+        {candidate_analysis}
         
-        Format the response as a JSON object with these categories as keys and arrays of questions as values.
-        Each question should be specific and reference the candidate's experience or skills.
+        Please generate questions in the following categories:
+        1. Job Description Based: Questions that assess the candidate's understanding and fit for the role
+        2. Experience Based: Questions that explore the candidate's past experience and achievements
+        3. Trending Topics: Questions about current industry trends and technologies
+        
+        For each question, provide:
+        - The question text
+        - The category (jd_based, experience_based, or trending)
+        - A brief context explaining why this question is relevant
+        
+        Format the response as a JSON array of objects with 'question', 'category', and 'context' fields.
+        Example format:
+        [
+            {{
+                "question": "How would you approach implementing a microservices architecture?",
+                "category": "jd_based",
+                "context": "This question assesses the candidate's understanding of modern software architecture."
+            }}
+        ]
+        
+        Ensure the response is valid JSON and includes 3-5 questions across different categories.
         """
-
-        # Call ChatGPT API
-        try:
-            client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are an expert technical interviewer. Generate specific, relevant interview questions based on the candidate's experience and skills."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=2000
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to generate questions with OpenAI: {str(e)}"
-            )
-
-        # Extract and parse the questions
-        try:
-            content = response.choices[0].message.content
-            questions = json.loads(content)
-        except (json.JSONDecodeError, AttributeError) as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to parse OpenAI response: {str(e)}"
-            )
-
+    
+    try:
+        messages = [HumanMessage(content=prompt)]
+        response = llm.invoke(messages)
+        
+        # Parse the response content as JSON
+        questions = json.loads(response.content)
         return questions
-
-    except HTTPException:
-        raise
+    except json.JSONDecodeError as e:
+        print(f"Error parsing LLM response as JSON: {str(e)}")
+        print(f"Raw response: {response.content}")
+        return []
     except Exception as e:
         print(f"Error generating questions: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate interview questions: {str(e)}"
-        ) 
+        return []

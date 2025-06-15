@@ -2,8 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
-from app.utils.aws_operations import get_candidates_by_score_range, update_candidate_verdict, get_all_candidates_by_job_id, get_candidate, upload_to_s3, update_candidate_questions, s3_key_to_url, S3_BUCKET_NAME, aws_region
-from app.utils.llm_operations import generate_interview_questions
+from app.utils.aws_operations import get_candidates_by_score_range, update_candidate_verdict, get_all_candidates_by_job_id, get_candidate, S3_BUCKET_NAME, aws_region
 from decimal import Decimal
 
 router = APIRouter()
@@ -14,21 +13,21 @@ class CustomCriteriaScore(BaseModel):
     justification: str
 
 class CandidateResponse(BaseModel):
-    job_id: str
-    candidate_id: str
-    name: str
-    email: str
-    jd_score: float
-    jd_analysis_url: str
-    status: str  # accepted/rejected/consideration
-    verdict_comment: str
-    cultural_fit_score: float
+    job_id: Optional[str] = None
+    candidate_id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    jd_score: Optional[float] = None
+    jd_analysis_url: Optional[str] = None
+    status: Optional[str] = None  # accepted/rejected/consideration
+    verdict_comment: Optional[str] = None
+    cultural_fit_score: Optional[float] = None
     cultural_analysis_url: Optional[str] = None
-    uniqueness_score: float
+    uniqueness_score: Optional[float] = None
     custom_criteria_score: Optional[float] = None
-    cultural_fit_justification: str
-    uniqueness_justification: str
-    absolute_score: float
+    cultural_fit_justification: Optional[str] = None
+    uniqueness_justification: Optional[str] = None
+    absolute_score: Optional[float] = None
     resume_key: Optional[str] = None
 
 class CandidateListResponse(BaseModel):
@@ -44,21 +43,12 @@ class CandidateListResponse(BaseModel):
     uniqueness_score: Optional[float] = None
     absolute_score: Optional[float] = None
     custom_criteria_scores: Optional[List[CustomCriteriaScore]] = None
-    questions: Optional[str] = None  # S3 URL to questions.json
     resume_key: Optional[str] = None
 
 class VerdictRequest(BaseModel):
     job_id: str
     candidate_id: str
     verdict_comment: str
-
-class QuestionsRequest(BaseModel):
-    job_id: str
-    candidate_id: str
-
-class QuestionsResponse(BaseModel):
-    s3_key: str
-    questions: Dict[str, List[str]]
 
 @router.get("/candidates/range", response_model=List[CandidateResponse])
 async def get_candidates_in_range(min_score: Optional[int] = 45, max_score: Optional[int] = 55):
@@ -156,59 +146,9 @@ async def accept_candidate(request: VerdictRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to accept candidate: {str(e)}")
 
-@router.post("/candidates/questions", response_model=QuestionsResponse)
-async def generate_questions(request: QuestionsRequest):
-    """
-    Generate interview questions for a candidate based on job ID and candidate ID.
-    The questions will be generated using ChatGPT and stored in S3.
-    """
-    try:
-        candidate = get_candidate(request.job_id, request.candidate_id)
-        if not candidate:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Candidate not found with job_id: {request.job_id} and candidate_id: {request.candidate_id}"
-            )
-
-        # Get the parsed resume key from candidate data
-        s3_parsed_key = candidate.get('s3_parsed_key')
-        if not s3_parsed_key:
-            raise HTTPException(
-                status_code=404,
-                detail="Parsed resume not found for this candidate"
-            )
-
-        # Convert S3 key to URL
-        parsed_resume_url = s3_key_to_url(s3_parsed_key)
-
-        # Pass the URL to your LLM logic (if needed)
-        questions = await generate_interview_questions(request.job_id, request.candidate_id, parsed_resume_url)
-
-        # Store questions in S3 and get the key
-        s3_key = f"{request.job_id}/{request.candidate_id}/questions.json"
-        success = upload_to_s3(S3_BUCKET_NAME, questions, s3_key)
-        if not success:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to store questions in S3"
-            )
-
-        # Update DynamoDB with questions key
-        success = update_candidate_questions(request.job_id, request.candidate_id, s3_key)
-        if not success:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to update candidate with questions key"
-            )
-
-        return {
-            "s3_key": s3_key,
-            "questions": questions
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate questions: {str(e)}"
-        ) 
+@router.get("/candidates/debug_get_candidate")
+def debug_get_candidate():
+    job_id = "TL001"
+    candidate_id = "c123456"
+    candidate = get_candidate(job_id, candidate_id)
+    return candidate 
