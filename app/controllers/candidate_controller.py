@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
-from ..utils.aws_operations import get_candidates_by_score_range, update_candidate_verdict, get_all_candidates_by_job_id, get_candidate, upload_to_s3, update_candidate_questions, s3_key_to_url, S3_BUCKET_NAME, aws_region
-from ..utils.llm_operations import generate_interview_questions
+from app.utils.aws_operations import get_candidates_by_score_range, update_candidate_verdict, get_all_candidates_by_job_id, get_candidate, upload_to_s3, update_candidate_questions, s3_key_to_url, S3_BUCKET_NAME, aws_region
+from app.utils.llm_operations import generate_interview_questions
 from decimal import Decimal
 
 router = APIRouter()
@@ -18,17 +18,17 @@ class CandidateResponse(BaseModel):
     candidate_id: str
     name: str
     email: str
-    jd_score: int
+    jd_score: float
     jd_analysis_url: str
     status: str  # accepted/rejected/consideration
     verdict_comment: str
-    cultural_fit_score: int
-    cultural_analysis_url: str
-    uniqueness_score: int
-    custom_criteria_score: int
+    cultural_fit_score: float
+    cultural_analysis_url: Optional[str] = None
+    uniqueness_score: float
+    custom_criteria_score: Optional[float] = None
     cultural_fit_justification: str
     uniqueness_justification: str
-    absolute_score: int
+    absolute_score: float
 
 class CandidateListResponse(BaseModel):
     candidate_id: str
