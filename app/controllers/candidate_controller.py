@@ -29,6 +29,7 @@ class CandidateResponse(BaseModel):
     cultural_fit_justification: str
     uniqueness_justification: str
     absolute_score: float
+    resume_key: Optional[str] = None
 
 class CandidateListResponse(BaseModel):
     candidate_id: str
@@ -38,12 +39,13 @@ class CandidateListResponse(BaseModel):
     email: str
     s3_parsed_key: Optional[str] = None
     ingested_at: Optional[str] = None
-    jd_score: Optional[int] = None
-    cultural_fit_score: Optional[int] = None
-    uniqueness_score: Optional[int] = None
-    absolute_score: Optional[int] = None
+    jd_score: Optional[float] = None
+    cultural_fit_score: Optional[float] = None
+    uniqueness_score: Optional[float] = None
+    absolute_score: Optional[float] = None
     custom_criteria_scores: Optional[List[CustomCriteriaScore]] = None
     questions: Optional[str] = None  # S3 URL to questions.json
+    resume_key: Optional[str] = None
 
 class VerdictRequest(BaseModel):
     job_id: str
