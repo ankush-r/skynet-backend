@@ -143,32 +143,39 @@ def add_to_dynamodb(item_data):
         print(f"Error adding item to DynamoDB: {str(e)}")
         return False
 
-def get_candidates_by_score_range(min_score=45, max_score=55):
+def get_candidates_by_score_range(min_score=45, max_score=55, status='IN_CONSIDERATION'):
     """
     Get all candidates from DynamoDB whose absolute scoring is between min_score and max_score
+    and have the specified status
     
     Args:
         min_score (int): Minimum absolute score (default: 45)
         max_score (int): Maximum absolute score (default: 55)
+        status (str): Status of the candidate (default: 'IN_CONSIDERATION')
         
     Returns:
-        list: List of candidate items matching the score range
+        list: List of candidate items matching the score range and status
     """
     try:
         dynamodb = session.resource('dynamodb')
         table = dynamodb.Table(os.getenv('DYNAMODB_TABLE_NAME'))
         
-        # Create filter expression for score range
-        filter_expression = 'absolute_scoring BETWEEN :min_score AND :max_score'
+        # Create filter expression for score range and status
+        filter_expression = 'absolute_scoring BETWEEN :min_score AND :max_score AND #status = :status'
         expression_values = {
             ':min_score': min_score,
-            ':max_score': max_score
+            ':max_score': max_score,
+            ':status': status
+        }
+        expression_names = {
+            '#status': 'status'  # 'status' is a reserved word in DynamoDB
         }
         
         # Query the table
         response = table.scan(
             FilterExpression=filter_expression,
-            ExpressionAttributeValues=expression_values
+            ExpressionAttributeValues=expression_values,
+            ExpressionAttributeNames=expression_names
         )
         
         # Get all items
@@ -179,11 +186,12 @@ def get_candidates_by_score_range(min_score=45, max_score=55):
             response = table.scan(
                 FilterExpression=filter_expression,
                 ExpressionAttributeValues=expression_values,
+                ExpressionAttributeNames=expression_names,
                 ExclusiveStartKey=response['LastEvaluatedKey']
             )
             items.extend(response.get('Items', []))
         
-        print(f"\n📊 Found {len(items)} candidates with scores between {min_score} and {max_score}")
+        print(f"\n📊 Found {len(items)} candidates with scores between {min_score} and {max_score} and status {status}")
         return items
     except Exception as e:
         print(f"Error querying DynamoDB: {str(e)}")

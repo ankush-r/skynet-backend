@@ -53,14 +53,15 @@ class VerdictRequest(BaseModel):
 @router.get("/candidates/range", response_model=List[CandidateResponse])
 async def get_candidates_in_range(min_score: Optional[int] = 45, max_score: Optional[int] = 55):
     """
-    Get all candidates with absolute scores between min_score and max_score
+    Get all candidates with absolute scores between min_score and max_score and status IN_CONSIDERATION
     """
     try:
         expression_values = {
             ':min_score': Decimal(str(min_score)),
-            ':max_score': Decimal(str(max_score))
+            ':max_score': Decimal(str(max_score)),
+            ':status': 'IN_CONSIDERATION'
         }
-        candidates = get_candidates_by_score_range(min_score, max_score)
+        candidates = get_candidates_by_score_range(min_score, max_score, status='IN_CONSIDERATION')
         if candidates is None:
             raise HTTPException(status_code=500, detail="Error fetching candidates")
         return candidates
@@ -113,10 +114,10 @@ async def get_all_candidates(job_id: str = "TL001"):
 @router.post("/candidates/reject")
 async def reject_candidate(request: VerdictRequest):
     """
-    Reject a candidate by updating their status to rejected
+    Reject a candidate by updating their status to REJECTED
     """
     try:
-        success, error_message = update_candidate_verdict(request.job_id, request.candidate_id, "rejected", request.verdict_comment)
+        success, error_message = update_candidate_verdict(request.job_id, request.candidate_id, "REJECTED", request.verdict_comment)
         if not success:
             raise HTTPException(
                 status_code=404 if "not found" in error_message.lower() else 500,
@@ -131,10 +132,10 @@ async def reject_candidate(request: VerdictRequest):
 @router.post("/candidates/accept")
 async def accept_candidate(request: VerdictRequest):
     """
-    Accept a candidate by updating their status to accepted
+    Accept a candidate by updating their status to ACCEPTED
     """
     try:
-        success, error_message = update_candidate_verdict(request.job_id, request.candidate_id, "accepted", request.verdict_comment)
+        success, error_message = update_candidate_verdict(request.job_id, request.candidate_id, "ACCEPTED", request.verdict_comment)
         if not success:
             raise HTTPException(
                 status_code=404 if "not found" in error_message.lower() else 500,

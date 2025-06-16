@@ -96,32 +96,39 @@ def upload_to_s3(bucket_name, file_content, key):
         print(f"Error uploading to S3: {str(e)}")
         return False
 
-def get_candidates_by_score_range(min_score=0, max_score=100):
+def get_candidates_by_score_range(min_score=0, max_score=100, status='IN_CONSIDERATION'):
     """
     Get all candidates from DynamoDB whose absolute score is between min_score and max_score
+    and have the specified status
     
     Args:
         min_score (int): Minimum absolute score (default: 0)
         max_score (int): Maximum absolute score (default: 100)
+        status (str): Status of the candidate (default: 'IN_CONSIDERATION')
         
     Returns:
-        list: List of candidate items matching the score range
+        list: List of candidate items matching the score range and status
     """
     try:
         dynamodb = session.resource('dynamodb')
         table = dynamodb.Table(os.getenv('DYNAMODB_TABLE_NAME'))
         
-        # Create filter expression for score range that handles null values
-        filter_expression = 'attribute_exists(absolute_score) AND absolute_score BETWEEN :min_score AND :max_score'
+        # Create filter expression for score range and status
+        filter_expression = 'attribute_exists(absolute_score) AND absolute_score BETWEEN :min_score AND :max_score AND #status = :status'
         expression_values = {
             ':min_score': min_score,
-            ':max_score': max_score
+            ':max_score': max_score,
+            ':status': status
+        }
+        expression_names = {
+            '#status': 'status'  # status is a reserved word in DynamoDB
         }
         
         # Query the table
         response = table.scan(
             FilterExpression=filter_expression,
-            ExpressionAttributeValues=expression_values
+            ExpressionAttributeValues=expression_values,
+            ExpressionAttributeNames=expression_names
         )
         
         # Get all items
@@ -132,6 +139,7 @@ def get_candidates_by_score_range(min_score=0, max_score=100):
             response = table.scan(
                 FilterExpression=filter_expression,
                 ExpressionAttributeValues=expression_values,
+                ExpressionAttributeNames=expression_names,
                 ExclusiveStartKey=response['LastEvaluatedKey']
             )
             items.extend(response.get('Items', []))
@@ -243,7 +251,7 @@ def get_all_candidates_by_job_id(job_id):
     3. cultural_fit_score (descending)
     4. uniqueness_score (descending)
     
-    Only returns candidates with status 'accepted' or 'inconsideration'
+    Only returns candidates with status 'ACCEPTED' or 'IN_CONSIDERATION'
     
     Args:
         job_id (str): The job ID to filter candidates by
@@ -274,8 +282,8 @@ def get_all_candidates_by_job_id(job_id):
             },
             ExpressionAttributeValues={
                 ':job_id': job_id,
-                ':status1': 'accepted',
-                ':status2': 'inconsideration'
+                ':status1': 'ACCEPTED',
+                ':status2': 'IN_CONSIDERATION'
             }
         )
         
@@ -294,8 +302,8 @@ def get_all_candidates_by_job_id(job_id):
                 },
                 ExpressionAttributeValues={
                     ':job_id': job_id,
-                    ':status1': 'accepted',
-                    ':status2': 'inconsideration'
+                    ':status1': 'ACCEPTED',
+                    ':status2': 'IN_CONSIDERATION'
                 },
                 ExclusiveStartKey=response['LastEvaluatedKey']
             )
